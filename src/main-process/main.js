@@ -1,3 +1,7 @@
+if (typeof snapshotResult !== 'undefined') {
+  snapshotResult.process.nextTick = process.nextTick
+}
+
 const startTime = Date.now()
 
 const electron = require('electron')

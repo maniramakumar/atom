@@ -13,7 +13,7 @@ module.exports = function () {
   ])
   const snapshotScriptContent = electronLink({
     baseDirPath: CONFIG.intermediateAppPath,
-    mainPath: path.join(CONFIG.intermediateAppPath, 'src', 'initialize-snapshot.js'),
+    mainPath: path.join(CONFIG.intermediateAppPath, 'src', 'initialize-application-window.js'),
     shouldExcludeModule: (modulePath) => {
       const relativePath = path.relative(CONFIG.intermediateAppPath, modulePath)
       return (

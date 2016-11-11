@@ -1,86 +1,110 @@
 (function () {
-  var path = require('path')
-  var FileSystemBlobStore = require('../src/file-system-blob-store')
-  var NativeCompileCache = require('../src/native-compile-cache')
+  let loadSettings
+  const path = require('path')
+  const FileSystemBlobStore = require('../src/file-system-blob-store')
 
-  var loadSettings = null
-  var loadSettingsError = null
-  var blobStore = null
-
-  window.onload = function () {
-    try {
-      var startTime = Date.now()
-
+  if (typeof snapshotResult !== 'undefined') {
+    window.onload = function () {
+      process.resourcesPath = path.normalize(process.resourcesPath)
       process.on('unhandledRejection', function (error, promise) {
         console.error('Unhandled promise rejection %o with error: %o', promise, error)
       })
+      snapshotResult.global.require = require
+      snapshotResult.process.nextTick = process.nextTick
+      snapshotResult.process.resourcePath = process.resourcesPath
+      snapshotResult.window.location = window.location
+      snapshotResult.window.decodeURIComponent = window.decodeURIComponent
 
-      blobStore = FileSystemBlobStore.load(
-        path.join(process.env.ATOM_HOME, 'blob-store/')
-      )
-      NativeCompileCache.setCacheStore(blobStore)
-      NativeCompileCache.setV8Version(process.versions.v8)
-      NativeCompileCache.install()
+      parseLoadSettings()
+      setupAtomHome()
 
-      // Normalize to make sure drive letter case is consistent on Windows
-      process.resourcesPath = path.normalize(process.resourcesPath)
+      require('../src/crash-reporter-start')({_version: loadSettings.appVersion})
 
-      if (loadSettingsError) {
-        throw loadSettingsError
-      }
-
-      var devMode = loadSettings.devMode || !loadSettings.resourcePath.startsWith(process.resourcesPath + path.sep)
-
-      if (devMode) {
-        setupDeprecatedPackages()
-      }
-
-      if (loadSettings.profileStartup) {
-        profileStartup(loadSettings, Date.now() - startTime)
-      } else {
-        setupWindow(loadSettings)
-        setLoadTime(Date.now() - startTime)
-      }
-    } catch (error) {
-      handleSetupError(error)
+      const blobStore = new FileSystemBlobStore(path.join(process.env.ATOM_HOME, 'blob-store/'))
+      const initialize = snapshotResult.require('./src/initialize-application-window.js')
+      initialize({blobStore})
     }
-  }
+  } else {
+    var NativeCompileCache = require('../src/native-compile-cache')
 
-  function setLoadTime (loadTime) {
-    if (global.atom) {
-      global.atom.loadTime = loadTime
+    var loadSettingsError = null
+    var blobStore = null
+
+    window.onload = function () {
+      try {
+        var startTime = Date.now()
+
+        process.on('unhandledRejection', function (error, promise) {
+          console.error('Unhandled promise rejection %o with error: %o', promise, error)
+        })
+
+        blobStore = FileSystemBlobStore.load(
+          path.join(process.env.ATOM_HOME, 'blob-store/')
+        )
+        NativeCompileCache.setCacheStore(blobStore)
+        NativeCompileCache.setV8Version(process.versions.v8)
+        NativeCompileCache.install()
+
+        // Normalize to make sure drive letter case is consistent on Windows
+        process.resourcesPath = path.normalize(process.resourcesPath)
+
+        if (loadSettingsError) {
+          throw loadSettingsError
+        }
+
+        var devMode = loadSettings.devMode || !loadSettings.resourcePath.startsWith(process.resourcesPath + path.sep)
+
+        if (devMode) {
+          setupDeprecatedPackages()
+        }
+
+        if (loadSettings.profileStartup) {
+          profileStartup(loadSettings, Date.now() - startTime)
+        } else {
+          setupWindow(loadSettings)
+          setLoadTime(Date.now() - startTime)
+        }
+      } catch (error) {
+        handleSetupError(error)
+      }
     }
-  }
 
-  function handleSetupError (error) {
-    var currentWindow = require('electron').remote.getCurrentWindow()
-    currentWindow.setSize(800, 600)
-    currentWindow.center()
-    currentWindow.show()
-    currentWindow.openDevTools()
-    console.error(error.stack || error)
-  }
+    function setLoadTime (loadTime) {
+      if (global.atom) {
+        global.atom.loadTime = loadTime
+      }
+    }
 
-  function setupWindow (loadSettings) {
-    var CompileCache = require('../src/compile-cache')
-    CompileCache.setAtomHomeDirectory(process.env.ATOM_HOME)
+    function handleSetupError (error) {
+      var currentWindow = require('electron').remote.getCurrentWindow()
+      currentWindow.setSize(800, 600)
+      currentWindow.center()
+      currentWindow.show()
+      currentWindow.openDevTools()
+      console.error(error.stack || error)
+    }
 
-    var ModuleCache = require('../src/module-cache')
-    ModuleCache.register(loadSettings)
-    ModuleCache.add(loadSettings.resourcePath)
+    function setupWindow (loadSettings) {
+      var CompileCache = require('../src/compile-cache')
+      CompileCache.setAtomHomeDirectory(process.env.ATOM_HOME)
 
-    // By explicitly passing the app version here, we could save the call
-    // of "require('remote').require('app').getVersion()".
-    var startCrashReporter = require('../src/crash-reporter-start')
-    startCrashReporter({_version: loadSettings.appVersion})
+      var ModuleCache = require('../src/module-cache')
+      ModuleCache.register(loadSettings)
+      ModuleCache.add(loadSettings.resourcePath)
 
-    setupVmCompatibility()
-    setupCsonCache(CompileCache.getCacheDirectory())
+      // By explicitly passing the app version here, we could save the call
+      // of "require('remote').require('app').getVersion()".
+      var startCrashReporter = require('../src/crash-reporter-start')
+      startCrashReporter({_version: loadSettings.appVersion})
 
-    var initialize = require(loadSettings.windowInitializationScript)
-    return initialize({blobStore: blobStore}).then(function () {
-      require('electron').ipcRenderer.send('window-command', 'window:loaded')
-    })
+      setupVmCompatibility()
+      setupCsonCache(CompileCache.getCacheDirectory())
+
+      var initialize = require(loadSettings.windowInitializationScript)
+      return initialize({blobStore: blobStore}).then(function () {
+        require('electron').ipcRenderer.send('window-command', 'window:loaded')
+      })
+    }
   }
 
   function setupCsonCache (cacheDir) {
@@ -149,7 +173,4 @@
       process.env.ATOM_HOME = loadSettings.atomHome
     }
   }
-
-  parseLoadSettings()
-  setupAtomHome()
 })()
