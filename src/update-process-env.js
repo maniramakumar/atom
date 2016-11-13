@@ -65,6 +65,8 @@ async function getEnvFromShell (env) {
 
   let {stdout, error} = await new Promise((resolve) => {
     let cp
+    let error
+    let stdout = ''
     const killer = () => {
       if (cp) {
         cp.kill()
@@ -72,9 +74,23 @@ async function getEnvFromShell (env) {
     }
     process.once('exit', killer)
 
-    cp = childProcess.execFile(env.SHELL, ['-ilc', 'command env'], {encoding: 'utf8', timeout: 5000}, (error, stdout) => {
-      resolve({stdout, error})
+    cp = childProcess.spawn(env.SHELL, ['-ilc', 'command env'], {encoding: 'utf8', timeout: 5000, detached: true, stdio: ['ignore', 'pipe', process.stderr]})
+
+    const buffers = []
+    cp.on('error', (e) => {
+      error = e
+    })
+    cp.stdout.on('data', (data) => {
+      buffers.push(data)
+    })
+    cp.on('close', (code, signal) => {
       process.removeListener('exit', killer)
+      if (!buffers || !buffers.length) {
+        resolve({stdout, error})
+        return
+      }
+      stdout = Buffer.concat(buffers).toString('utf8')
+      resolve({stdout, error})
     })
   })
 
