@@ -64,8 +64,17 @@ async function getEnvFromShell (env) {
   }
 
   let {stdout, error} = await new Promise((resolve) => {
-    childProcess.execFile(env.SHELL, ['-ilc', 'command env'], {encoding: 'utf8', timeout: 5000}, (error, stdout) => {
+    let cp
+    const killer = () => {
+      if (cp) {
+        cp.kill()
+      }
+    }
+    process.once('exit', killer)
+
+    cp = childProcess.execFile(env.SHELL, ['-ilc', 'command env'], {encoding: 'utf8', timeout: 5000}, (error, stdout) => {
       resolve({stdout, error})
+      process.removeListener('exit', killer)
     })
   })
 
