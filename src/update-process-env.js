@@ -82,7 +82,7 @@ async function getEnvFromShell (env) {
     if (error.handle) {
       error.handle()
     }
-    console.log('warning: ' + env.SHELL + ' -ic "command env" failed with signal (' + error.signal + ')')
+    console.log('warning: ' + env.SHELL + ' -lc "command env" failed with signal (' + error.signal + ')')
     console.log(error)
   }
 
